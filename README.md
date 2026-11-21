@@ -11,8 +11,8 @@ inside the app, pick your console, and stream it with the graphics card decoding
 - The delay is always shown; a data limit (20 GB a month, a warning at 90 %) counts on every network.
 - Hold View + Menu for 1 second for the app's menu. Cloud games are an optional tab.
 
-Parts of the stream's input follow Greenlight (MIT): see `LICENSES/greenlight-MIT.txt`. The approved mockups and their
-checklist live in Hearth OS (`docs/mockups/console-remote-play`, `docs/CONSOLE-REMOTE-PLAY.md`).
+Parts of the stream's input follow Greenlight (MIT): see `LICENSES/greenlight-MIT.txt`. The approved mockups and
+their checklist are in `docs/mockups`, and how it works in `docs/CONSOLE-REMOTE-PLAY.md`.
 
 ## Building
 
