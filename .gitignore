@@ -1,0 +1,9 @@
+target/
+hearth-os/
+bin/
+AppDir/
+dist/
+shots/
+results.txt
+notes.txt
+*.log
