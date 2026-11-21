@@ -51,7 +51,9 @@ gstreamer-video = { version = "0.24", optional = true }
 [dev-dependencies]
 tempfile = "3"
 
+# Hearth OS (for hearth-ui) is checked out into hearth-os/ in CI: it has workspaces of its own, so it stays out of this one.
 [workspace]
+exclude = ["hearth-os"]
 
 [profile.release]
 opt-level = 3
