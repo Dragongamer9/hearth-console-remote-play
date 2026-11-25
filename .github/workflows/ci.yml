@@ -159,9 +159,64 @@ jobs:
           python3 -c 'import PIL' 2>/dev/null || python3 -m pip install --quiet --break-system-packages pillow >/dev/null 2>&1 || python3 -m pip install --quiet pillow >/dev/null
           python3 .github/scripts/shot.py ${{ matrix.shot }}
 
+  # The binary the AppImage carries, built on Debian 13 (Hearth OS's own edition, glibc 2.41): a build on Fedora 45 needs
+  # glibc 2.43+ and won't start on Debian ("GLIBC_2.43 not found", the owner's Nvidia PC, Nov 25, 2026). Built on the
+  # older glibc it starts on Debian and on Fedora alike. The tests run in the build job above.
+  build-debian:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container: debian:trixie
+    steps:
+      - name: Rust, the libraries iced uses, and GStreamer's (Debian's)
+        run: |
+          apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git curl ca-certificates build-essential pkg-config \
+            libxkbcommon-dev libwayland-dev libfontconfig-dev libfreetype-dev python3 libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev >/dev/null
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal >/dev/null
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "::notice title=debian::glibc $(ldd --version | head -1 | awk '{print $NF}') · GStreamer $(pkg-config --modversion gstreamer-1.0)"
+      - uses: actions/checkout@v4
+      - name: Hearth's shared look and widgets (hearth-ui), from Hearth OS at the commit in hearth-os.ref
+        run: |
+          git clone -q --filter=blob:none --no-checkout https://github.com/Dragongamer9/hearth-os hearth-os
+          git -C hearth-os sparse-checkout set --no-cone /hosts/hearth-ui/ /hosts/linux/desktop/theme/ /hosts/hearth-core/src/ /ui/osk/
+          git -C hearth-os checkout -q "$(cat hearth-os.ref)"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: console-remote-play-deb13-${{ hashFiles('Cargo.toml', 'hearth-os.ref') }}-${{ github.sha }}
+          restore-keys: console-remote-play-deb13-${{ hashFiles('Cargo.toml', 'hearth-os.ref') }}-
+      - name: Build
+        run: |
+          set -o pipefail
+          if ! cargo build --release 2>&1 | tee build.log; then
+            grep -E '^error' -A8 build.log | head -200 | tr '\n' '|' | fold -w 3800 | head -10 | while read -r l; do echo "::error title=cargo build (Debian)::$l"; done
+            exit 1
+          fi
+      - name: Starts on Debian 13 (no newer glibc than 2.41 asked for)
+        run: |
+          mkdir -p bin
+          cp target/release/hearth-console-remote-play bin/
+          ls bin
+          bad=0
+          for f in bin/*; do
+            need=$(objdump -T "$f" 2>/dev/null | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1)
+            echo "::notice title=glibc::$(basename "$f") needs $need"
+            if [ "$(printf '%s\n' "$need" GLIBC_2.41 | sort -V | tail -1)" != GLIBC_2.41 ]; then echo "::error title=glibc::$(basename "$f") needs $need, newer than Debian 13's 2.41"; bad=1; fi
+          done
+          [ $bad = 0 ] && cp helper/hearth-console-remote-play-signin bin/
+          exit $bad
+      - uses: actions/upload-artifact@v4
+        with:
+          name: console-remote-play-debian
+          path: bin
+          retention-days: 7
+
   # The AppImage the Hearth Store installs (and the owner can try by hand): on every run, kept 14 days on the run.
   appimage:
-    needs: build
+    needs: build-debian
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container: registry.fedoraproject.org/fedora:45
@@ -170,7 +225,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: console-remote-play
+          name: console-remote-play-debian
           path: bin
       - name: Make the AppImage
         run: chmod +x bin/* && bash .github/scripts/appimage.sh "hearth-console-remote-play" "Hearth Console Remote Play" "RP" "#34d399" "#047857" bin/hearth-console-remote-play-signin
